@@ -11,7 +11,7 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 st.set_page_config(page_title="MinaOperAI - Fast2Mine Edition", layout="wide")
 st.title("🚀 MinaOperAI - Análise de Ciclos Fast2Mine")
-st.markdown("**Por Diego Salim Mapa** – Ex-gerente Tico-Tico & Fast2Mine | BH, 2026")
+st.markdown("**Por Diego Salim Mapa** – Engenheiro de Minas | MBA Data Science | BH, 2026")
 
 uploaded_file = st.file_uploader("Suba sua exportação Fast2Mine (Excel/CSV)", type=["xlsx", "xls", "csv"])
 
