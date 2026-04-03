@@ -45,11 +45,22 @@ if uploaded_file is not None:
         else:
             df = pd.read_excel(uploaded_file, skiprows=1)
 
-        # Conversão de data
         if 'Data Início' in df.columns:
             df['Data Início'] = pd.to_datetime(df['Data Início'], errors='coerce')
 
-        st.success(f"✅ Carregado com sucesso! {len(df):,} ciclos encontrados.")
+        st.success(f"✅ Carregado! {len(df):,} ciclos.")
+
+        # ====================== REMOVER OUTLIERS ======================
+        remove_outliers = st.checkbox("Remover outliers (usando método IQR)", value=False)
+
+        if remove_outliers and 'Tempo de Ciclo (min)' in df.columns:
+            Q1 = df['Tempo de Ciclo (min)'].quantile(0.25)
+            Q3 = df['Tempo de Ciclo (min)'].quantile(0.75)
+            IQR = Q3 - Q1
+            lower_bound = Q1 - 1.5 * IQR
+            upper_bound = Q3 + 1.5 * IQR
+            df = df[(df['Tempo de Ciclo (min)'] >= lower_bound) & (df['Tempo de Ciclo (min)'] <= upper_bound)]
+            st.info(f"Outliers removidos. Restaram {len(df):,} ciclos.")
 
         st.subheader("Prévia dos dados")
         st.dataframe(df.head(10))
@@ -57,7 +68,6 @@ if uploaded_file is not None:
         # ====================== DASHBOARD ======================
         st.subheader("📊 Dashboard")
 
-        # Métricas principais
         col1, col2, col3, col4 = st.columns(4)
         if 'Massa (tons)' in df.columns:
             col1.metric("Total Massa", f"{df['Massa (tons)'].sum():,.0f} tons")
@@ -67,23 +77,28 @@ if uploaded_file is not None:
             col3.metric("Tempo Médio Fila", f"{df['Tempo Fila Carregamento (min)'].mean():.1f} min")
         col4.metric("Total Ciclos", len(df))
 
-        # Gráficos adaptados para sua planilha
+        # Gráficos
         if 'Data Início' in df.columns and 'Massa (tons)' in df.columns:
             df_daily = df.groupby(pd.Grouper(key='Data Início', freq='D'))['Massa (tons)'].sum().reset_index()
-            fig1 = px.line(df_daily, x='Data Início', y='Massa (tons)', title="Produção Diária (Massa Total)")
+            fig1 = px.line(df_daily, x='Data Início', y='Massa (tons)', title="Produção Diária")
             st.plotly_chart(fig1, use_container_width=True)
 
         if 'Tempo de Ciclo (min)' in df.columns:
             fig2 = px.histogram(df, x='Tempo de Ciclo (min)', title="Distribuição do Tempo de Ciclo")
             st.plotly_chart(fig2, use_container_width=True)
 
+        # ==================== BOX PLOT (Diagrama de Caixa) ====================
+        if 'Tempo de Ciclo (min)' in df.columns:
+            fig_box = px.box(df, y='Tempo de Ciclo (min)', title="Box Plot - Tempo de Ciclo (min)")
+            st.plotly_chart(fig_box, use_container_width=True)
+
         if 'Tempo Fila Carregamento (min)' in df.columns:
-            fig3 = px.box(df, y='Tempo Fila Carregamento (min)', title="Tempo de Fila no Carregamento")
-            st.plotly_chart(fig3, use_container_width=True)
+            fig_fila = px.box(df, y='Tempo Fila Carregamento (min)', title="Box Plot - Tempo de Fila no Carregamento")
+            st.plotly_chart(fig_fila, use_container_width=True)
 
         # ====================== IA ======================
         st.subheader("💬 Pergunte à IA")
-        query = st.text_input("Ex: 'Onde está o maior gargalo?' ou 'Sugestões para reduzir fila'")
+        query = st.text_input("Ex: 'Onde está o maior gargalo?' ou 'Sugestões para reduzir tempo de ciclo'")
 
         if st.button("Analisar com IA") and query:
             with st.spinner("Analisando..."):
@@ -93,34 +108,13 @@ if uploaded_file is not None:
                 Tempo médio ciclo: {df.get('Tempo de Ciclo (min)', pd.Series([0])).mean():.1f} min
                 Tempo médio fila: {df.get('Tempo Fila Carregamento (min)', pd.Series([0])).mean():.1f} min
                 """
-                prompt = f"Você é gerente de frota experiente em Fast2Mine. Resumo: {summary}\nPergunta: {query}\nResponda prático em português com sugestões reais."
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini", 
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=700
-                )
+                prompt = f"Você é gerente de frota experiente em Fast2Mine. Resumo: {summary}\nPergunta: {query}\nResponda prático em português."
+                response = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": prompt}], max_tokens=700)
                 st.write(response.choices[0].message.content)
-
-        # ====================== PDF ======================
-        if st.button("📄 Gerar PDF Completo"):
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font("Arial", 'B', 16)
-            pdf.cell(0, 10, "Relatório MinaOperAI - Fast2Mine", ln=1, align='C')
-            pdf.ln(10)
-            pdf.set_font("Arial", size=12)
-            pdf.cell(0, 10, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=1)
-            pdf.cell(0, 10, f"Total ciclos: {len(df)}", ln=1)
-            if 'Massa (tons)' in df.columns:
-                pdf.cell(0, 10, f"Total massa: {df['Massa (tons)'].sum():,.0f} tons", ln=1)
-
-            pdf.output("relatorio_minaoperai.pdf")
-            with open("relatorio_minaoperai.pdf", "rb") as f:
-                st.download_button("Baixar PDF", f, "relatorio_minaoperai.pdf")
 
     except Exception as e:
         st.error(f"Erro ao processar: {e}")
 else:
-    st.info("👆 Suba sua planilha de exportação do Fast2Mine para começar.")
+    st.info("👆 Suba sua planilha do Fast2Mine para começar.")
 
 st.caption("MinaOperAI • Desenvolvido por Diego Salim Mapa")
