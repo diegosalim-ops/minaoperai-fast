@@ -5,4 +5,4 @@ plotly
 openai
 python-dotenv
 fpdf2
-matplotlib
+kaleido
