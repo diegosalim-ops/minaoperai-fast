@@ -73,15 +73,15 @@ if uploaded_file is not None:
 
         # ====================== GRÁFICOS ======================
         st.subheader("📊 Gráficos Gerados")
-        figures = []
+        figures = []   # Guardamos para o PDF
 
         if col_x and col_y:
-            # Gráfico de Linha
+            # Linha (se for data)
             if col_x in date_cols:
                 df_group = df.groupby(pd.Grouper(key=col_x, freq='D'))[col_y].mean().reset_index()
                 fig_line = px.line(df_group, x=col_x, y=col_y, title=f"{col_y} ao longo do tempo")
                 st.plotly_chart(fig_line, use_container_width=True)
-                figures.append(("Produção ao longo do tempo", fig_line))
+                figures.append(("Gráfico de Linha", fig_line))
 
             # Scatter
             fig_scatter = px.scatter(df, x=col_x, y=col_y, title=f"{col_y} vs {col_x}")
@@ -100,19 +100,19 @@ if uploaded_file is not None:
 
         # ====================== IA ======================
         st.subheader("💬 Pergunte à IA")
-        query = st.text_input("Ex: 'Onde está o maior gargalo?'")
+        query = st.text_input("Ex: 'Onde está o maior gargalo?' ou 'Sugestões para reduzir tempo de ciclo'")
 
         ia_response = None
         if st.button("Analisar com IA") and query:
             with st.spinner("Analisando..."):
-                summary = f"Total registros: {len(df)} | Coluna: {col_y} | Média: {df[col_y].mean():.2f}"
+                summary = f"Total registros: {len(df)} | Coluna analisada: {col_y} | Média: {df[col_y].mean():.2f}"
                 prompt = f"Você é gerente de frota experiente em Fast2Mine.\nResumo: {summary}\nPergunta: {query}\nResponda prático em português."
                 response = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": prompt}], max_tokens=700)
                 ia_response = response.choices[0].message.content
                 st.write(ia_response)
 
         # ====================== PDF ======================
-        if st.button("📄 Gerar PDF Completo (com gráficos e análise)"):
+        if st.button("📄 Gerar PDF Completo"):
             with st.spinner("Gerando PDF..."):
                 pdf = FPDF()
                 pdf.add_page()
@@ -122,7 +122,7 @@ if uploaded_file is not None:
 
                 pdf.set_font("Arial", size=12)
                 pdf.cell(0, 10, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=1)
-                pdf.cell(0, 10, f"Total ciclos: {len(df)}", ln=1)
+                pdf.cell(0, 10, f"Total de ciclos: {len(df)}", ln=1)
                 pdf.cell(0, 10, f"Coluna analisada: {col_y}", ln=1)
                 pdf.ln(10)
 
@@ -132,8 +132,8 @@ if uploaded_file is not None:
                     pdf.set_font("Arial", 'B', 12)
                     pdf.cell(0, 10, title, ln=1, align='C')
                     pdf.ln(10)
-                    # Salvar imagem temporária
-                    img_bytes = fig.to_image(format="png", width=1000, height=600)
+                    # Converte para imagem sem kaleido
+                    img_bytes = fig.to_image(format="png", width=1000, height=600, scale=2)
                     with open("temp_chart.png", "wb") as f:
                         f.write(img_bytes)
                     pdf.image("temp_chart.png", x=10, y=30, w=180)
