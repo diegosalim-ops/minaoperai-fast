@@ -5,8 +5,6 @@ from openai import OpenAI
 from fpdf import FPDF
 import os
 from dotenv import load_dotenv
-import matplotlib.pyplot as plt
-from io import BytesIO
 from datetime import datetime
 
 load_dotenv()
@@ -59,13 +57,8 @@ if uploaded_file is not None:
         numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
         date_cols = [col for col in df.columns if 'Data' in col or 'data' in col.lower()]
 
-        col_x = st.selectbox("Coluna X (geralmente Data ou Tempo)", 
-                             options=date_cols + numeric_cols, 
-                             index=0 if date_cols else 0)
-
-        col_y = st.selectbox("Coluna Y (o que você quer analisar)", 
-                             options=numeric_cols, 
-                             index=0)
+        col_x = st.selectbox("Coluna X (geralmente Data)", options=date_cols + numeric_cols, index=0 if date_cols else 0)
+        col_y = st.selectbox("Coluna Y (o que quer analisar)", options=numeric_cols, index=0)
 
         remove_outliers = st.checkbox("Remover outliers da coluna Y", value=False)
 
@@ -80,8 +73,7 @@ if uploaded_file is not None:
 
         # ====================== GRÁFICOS ======================
         st.subheader("📊 Gráficos Gerados")
-
-        figures = []  # Vamos guardar os gráficos para o PDF
+        figures = []
 
         if col_x and col_y:
             # Gráfico de Linha
@@ -89,12 +81,12 @@ if uploaded_file is not None:
                 df_group = df.groupby(pd.Grouper(key=col_x, freq='D'))[col_y].mean().reset_index()
                 fig_line = px.line(df_group, x=col_x, y=col_y, title=f"{col_y} ao longo do tempo")
                 st.plotly_chart(fig_line, use_container_width=True)
-                figures.append(("Linha", fig_line))
+                figures.append(("Produção ao longo do tempo", fig_line))
 
-            # Scatter Plot
+            # Scatter
             fig_scatter = px.scatter(df, x=col_x, y=col_y, title=f"{col_y} vs {col_x}")
             st.plotly_chart(fig_scatter, use_container_width=True)
-            figures.append(("Scatter", fig_scatter))
+            figures.append(("Scatter Plot", fig_scatter))
 
             # Box Plot
             fig_box = px.box(df, y=col_y, title=f"Box Plot - {col_y}")
@@ -108,67 +100,51 @@ if uploaded_file is not None:
 
         # ====================== IA ======================
         st.subheader("💬 Pergunte à IA")
-        query = st.text_input("Ex: 'Onde está o maior gargalo?' ou 'Sugestões para reduzir tempo de ciclo'")
+        query = st.text_input("Ex: 'Onde está o maior gargalo?'")
 
         ia_response = None
         if st.button("Analisar com IA") and query:
             with st.spinner("Analisando..."):
-                summary = f"""
-                Total registros: {len(df)}
-                Coluna analisada: {col_y}
-                Média: {df[col_y].mean():.2f}
-                Mínimo: {df[col_y].min():.2f} | Máximo: {df[col_y].max():.2f}
-                """
+                summary = f"Total registros: {len(df)} | Coluna: {col_y} | Média: {df[col_y].mean():.2f}"
                 prompt = f"Você é gerente de frota experiente em Fast2Mine.\nResumo: {summary}\nPergunta: {query}\nResponda prático em português."
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini", 
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=700
-                )
+                response = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": prompt}], max_tokens=700)
                 ia_response = response.choices[0].message.content
                 st.write(ia_response)
 
-        # ====================== GERAR PDF COM GRÁFICOS E ANÁLISE ======================
+        # ====================== PDF ======================
         if st.button("📄 Gerar PDF Completo (com gráficos e análise)"):
             with st.spinner("Gerando PDF..."):
                 pdf = FPDF()
                 pdf.add_page()
                 pdf.set_font("Arial", 'B', 16)
                 pdf.cell(0, 10, "Relatório MinaOperAI - Fast2Mine", ln=1, align='C')
-                pdf.ln(10)
+                pdf.ln(15)
+
                 pdf.set_font("Arial", size=12)
                 pdf.cell(0, 10, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=1)
-                pdf.cell(0, 10, f"Total de ciclos: {len(df)}", ln=1)
+                pdf.cell(0, 10, f"Total ciclos: {len(df)}", ln=1)
                 pdf.cell(0, 10, f"Coluna analisada: {col_y}", ln=1)
-                pdf.ln(5)
-
-                # Métricas
-                if col_y in df.columns:
-                    pdf.cell(0, 10, f"Média de {col_y}: {df[col_y].mean():.2f}", ln=1)
-                    pdf.cell(0, 10, f"Mínimo: {df[col_y].min():.2f} | Máximo: {df[col_y].max():.2f}", ln=1)
-
                 pdf.ln(10)
 
-                # Adicionar gráficos no PDF
+                # Adicionar gráficos (usando plotly direto)
                 for title, fig in figures:
-                    # Converter Plotly para imagem
-                    img_bytes = fig.to_image(format="png")
                     pdf.add_page()
                     pdf.set_font("Arial", 'B', 12)
                     pdf.cell(0, 10, title, ln=1, align='C')
-                    pdf.ln(5)
-                    # Salvar temporariamente e inserir
-                    with open("temp_img.png", "wb") as f:
+                    pdf.ln(10)
+                    # Salvar imagem temporária
+                    img_bytes = fig.to_image(format="png", width=1000, height=600)
+                    with open("temp_chart.png", "wb") as f:
                         f.write(img_bytes)
-                    pdf.image("temp_img.png", x=10, y=30, w=180)
-                    os.remove("temp_img.png")
+                    pdf.image("temp_chart.png", x=10, y=30, w=180)
+                    os.remove("temp_chart.png")
 
                 # Adicionar resposta da IA
                 if ia_response:
                     pdf.add_page()
                     pdf.set_font("Arial", 'B', 14)
                     pdf.cell(0, 10, "Análise da IA", ln=1)
-                    pdf.ln(5)
+                    pdf.ln(10)
                     pdf.set_font("Arial", size=11)
                     pdf.multi_cell(0, 8, ia_response)
 
@@ -178,7 +154,7 @@ if uploaded_file is not None:
                     st.download_button(
                         label="📥 Baixar PDF Completo",
                         data=f,
-                        file_name="relatorio_minaoperai.pdf",
+                        file_name=f"relatorio_minaoperai_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
                         mime="application/pdf"
                     )
 
