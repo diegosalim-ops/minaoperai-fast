@@ -51,9 +51,8 @@ if uploaded_file is not None:
         st.subheader("Prévia dos dados")
         st.dataframe(df.head(10))
 
-        # ====================== SELEÇÃO DE COLUNAS ======================
+        # Seleção de colunas
         st.subheader("🎯 Escolha as colunas para análise")
-
         numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
         date_cols = [col for col in df.columns if 'Data' in col or 'data' in col.lower()]
 
@@ -71,47 +70,37 @@ if uploaded_file is not None:
             df = df[(df[col_y] >= lower) & (df[col_y] <= upper)]
             st.info(f"Outliers removidos. Restaram {len(df):,} registros.")
 
-        # ====================== GRÁFICOS ======================
-        st.subheader("📊 Gráficos Gerados")
-        figures = []   # Guardamos para o PDF
-
+        # Gráficos na tela
+        st.subheader("📊 Gráficos")
         if col_x and col_y:
-            # Linha (se for data)
             if col_x in date_cols:
                 df_group = df.groupby(pd.Grouper(key=col_x, freq='D'))[col_y].mean().reset_index()
                 fig_line = px.line(df_group, x=col_x, y=col_y, title=f"{col_y} ao longo do tempo")
                 st.plotly_chart(fig_line, use_container_width=True)
-                figures.append(("Gráfico de Linha", fig_line))
 
-            # Scatter
             fig_scatter = px.scatter(df, x=col_x, y=col_y, title=f"{col_y} vs {col_x}")
             st.plotly_chart(fig_scatter, use_container_width=True)
-            figures.append(("Scatter Plot", fig_scatter))
 
-            # Box Plot
             fig_box = px.box(df, y=col_y, title=f"Box Plot - {col_y}")
             st.plotly_chart(fig_box, use_container_width=True)
-            figures.append(("Box Plot", fig_box))
 
-            # Histograma
             fig_hist = px.histogram(df, x=col_y, title=f"Distribuição de {col_y}")
             st.plotly_chart(fig_hist, use_container_width=True)
-            figures.append(("Histograma", fig_hist))
 
-        # ====================== IA ======================
+        # IA
         st.subheader("💬 Pergunte à IA")
-        query = st.text_input("Ex: 'Onde está o maior gargalo?' ou 'Sugestões para reduzir tempo de ciclo'")
+        query = st.text_input("Ex: 'Onde está o maior gargalo?'")
 
         ia_response = None
         if st.button("Analisar com IA") and query:
             with st.spinner("Analisando..."):
-                summary = f"Total registros: {len(df)} | Coluna analisada: {col_y} | Média: {df[col_y].mean():.2f}"
+                summary = f"Total registros: {len(df)} | Coluna: {col_y} | Média: {df[col_y].mean():.2f}"
                 prompt = f"Você é gerente de frota experiente em Fast2Mine.\nResumo: {summary}\nPergunta: {query}\nResponda prático em português."
                 response = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "user", "content": prompt}], max_tokens=700)
                 ia_response = response.choices[0].message.content
                 st.write(ia_response)
 
-        # ====================== PDF ======================
+        # ====================== PDF SIMPLES E ESTÁVEL ======================
         if st.button("📄 Gerar PDF Completo"):
             with st.spinner("Gerando PDF..."):
                 pdf = FPDF()
@@ -126,22 +115,14 @@ if uploaded_file is not None:
                 pdf.cell(0, 10, f"Coluna analisada: {col_y}", ln=1)
                 pdf.ln(10)
 
-                # Adicionar gráficos (usando plotly direto)
-                for title, fig in figures:
-                    pdf.add_page()
-                    pdf.set_font("Arial", 'B', 12)
-                    pdf.cell(0, 10, title, ln=1, align='C')
-                    pdf.ln(10)
-                    # Converte para imagem sem kaleido
-                    img_bytes = fig.to_image(format="png", width=1000, height=600, scale=2)
-                    with open("temp_chart.png", "wb") as f:
-                        f.write(img_bytes)
-                    pdf.image("temp_chart.png", x=10, y=30, w=180)
-                    os.remove("temp_chart.png")
+                if col_y in df.columns:
+                    pdf.cell(0, 10, f"Média de {col_y}: {df[col_y].mean():.2f}", ln=1)
+                    pdf.cell(0, 10, f"Mínimo: {df[col_y].min():.2f} | Máximo: {df[col_y].max():.2f}", ln=1)
+
+                pdf.ln(10)
 
                 # Adicionar resposta da IA
                 if ia_response:
-                    pdf.add_page()
                     pdf.set_font("Arial", 'B', 14)
                     pdf.cell(0, 10, "Análise da IA", ln=1)
                     pdf.ln(10)
